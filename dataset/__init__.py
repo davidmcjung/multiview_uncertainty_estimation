@@ -30,7 +30,7 @@ def get_datasets(opts):
     if opts.dataset == 'CIFAR10-C':
         from .cifar10c import train_test_datasets, svhn_ood_dataset, cifar100_ood_dataset
         corruption_types = ['gaussian_noise','shot_noise','impulse_noise']
-        train_dataset, test_dataset, train_size, test_size =  train_test_datasets(
+        train_dataset, test_dataset, train_size, test_size, lengthscales_init =  train_test_datasets(
                                                                     os.path.join(opts.data_dir, opts.dataset), 
                                                                     corruptions=corruption_types, 
                                                                     severities=opts.corruption_severities, 
@@ -59,10 +59,11 @@ def get_datasets(opts):
                     'feat_dims': feat_dims,
                     'num_classes': num_classes,
                     'svhn_ood_dataset': cifar10c_svhn,
-                    'cifar100_ood_dataset': cifar10c_cifar100}
+                    'cifar100_ood_dataset': cifar10c_cifar100,
+                    'lengthscales_init': lengthscales_init}
         return datasets
     elif feat_dims and num_classes:
-        train_dataset, test_dataset, train_size, test_size = train_test_datasets(
+        train_dataset, test_dataset, train_size, test_size, lengthscales_init = train_test_datasets(
                                                                     os.path.join(opts.data_dir, opts.dataset),
                                                                     batch_size=opts.batch_size, 
                                                                     seed=opts.seed, 
@@ -73,7 +74,8 @@ def get_datasets(opts):
                     'noisy_dataset_fn': noisy_dataset,
                     'test_size': test_size,
                     'feat_dims': feat_dims,
-                    'num_classes': num_classes}
+                    'num_classes': num_classes,
+                    'lengthscales_init': lengthscales_init}
         return datasets
     else:
         logging.fatal('Unknown dataset.')

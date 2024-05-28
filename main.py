@@ -11,6 +11,7 @@ import robustness_metrics as rm
 import itertools
 from dataset import get_datasets
 from models import get_model
+import json
 
 # Params for datasets
 flags.DEFINE_string('dataset', 'Handwritten', '[Handwritten, CUB, Caltech101, HMDB, PIE, Scene15, CIFAR10-C]')
@@ -36,7 +37,7 @@ flags.DEFINE_float('a_eps', 1e-7, 'Alpha epsilon.')
 flags.DEFINE_float('beta', 1.0, 'Beta.')
 flags.DEFINE_string('train_weighting', 'poe', 'Weighting scheme for combining posteriors during training.')
 flags.DEFINE_string('test_weighting', 'entropy', 'Weighting scheme for combining posteriors during testing.')
-flags.DEFINE_bool('init_lengthscale_data', False, 'Wheter to intialise kernel lengthscale from data.')
+flags.DEFINE_bool('init_lengthscale_data', True, 'Wheter to intialise kernel lengthscale from data.')
 
 # Params for MNP
 flags.DEFINE_integer('r_dim', 512, 'Latent space dimension.')
@@ -64,6 +65,9 @@ def main(argv):
     tensorboard_dir = os.path.join(output_dir, 'tensorboard')
     tf.io.gfile.makedirs(output_dir)
     tf.io.gfile.makedirs(tensorboard_dir)
+    json_dict = json.dumps(FLAGS.flag_values_dict(), indent=4)
+    with open(os.path.join(output_dir, 'flags.json'), 'w') as f:
+        f.write(json_dict)
 
     # Set random seeds
     logging.info(f'Random seed: {FLAGS.seed}')
@@ -84,6 +88,9 @@ def main(argv):
     logging.info('Building model')
     model = get_model(opts=FLAGS, datasets=datasets)
     scheduler = tf.keras.optimizers.schedules.PolynomialDecay(FLAGS.lr, FLAGS.epochs*steps_per_epoch, FLAGS.end_lr)
+    #epochs_to_reduce_lr = [80,120]
+    #lr_values = [FLAGS.lr*(0.2**i) for i in range(len(epochs_to_reduce_lr)+1)]
+    #scheduler = tf.keras.optimizers.schedules.PiecewiseConstantDecay(epochs_to_reduce_lr, lr_values)
     optimizer = tf.keras.optimizers.Adam(learning_rate=scheduler, clipnorm=FLAGS.clipnorm)
 
     warmup_scheduler = tf.keras.optimizers.schedules.PolynomialDecay(FLAGS.warmup_lr, FLAGS.warmup_epochs*steps_per_epoch, FLAGS.warmup_lr*1e-1)
@@ -124,7 +131,7 @@ def main(argv):
         return loss
     
     @tf.function
-    def train_step(inputs, step, metrics):
+    def train_step(inputs, metrics):
         (*X, label) = inputs
         with tf.GradientTape() as tape:
             train_vars = [tuple(model.experts[i].trainable_variables) for i in range(num_views)]
@@ -148,7 +155,7 @@ def main(argv):
         return loss
 
     @tf.function
-    def test_step(inputs, step, metrics, dataset_name):
+    def test_step(inputs, metrics, dataset_name):
         (*X, label) = inputs
         if FLAGS.model == 'MGP':
             p_experts, var_experts, p_combined, var_combined, loss = model(X, label, FLAGS.test_weighting)
@@ -192,14 +199,12 @@ def main(argv):
                 metric.reset_states()
 
     train_iterator = iter(datasets['train_dataset'])
-    epoch_var = tf.Variable(0, dtype=tf.int32)
     for epoch in range(FLAGS.epochs):
-        epoch_var.assign(epoch)
         train_start_time = time.time()
         # Training
         with tqdm(total=steps_per_epoch, desc='Train Epoch #{}'.format(epoch+1)) as t:
             for step in range(steps_per_epoch):
-                train_loss = train_step(next(train_iterator), epoch_var, during_training_metrics)
+                train_loss = train_step(next(train_iterator), during_training_metrics)
             
                 t.set_postfix({'loss': train_loss.numpy()})
                 t.update(1)
@@ -210,7 +215,7 @@ def main(argv):
         test_start_time = time.time()
         with tqdm(total=steps_per_eval, desc='Testing') as t:
             for step in range(steps_per_eval):
-                test_loss = test_step(next(test_iterator), epoch_var, during_training_metrics, 'test')
+                test_loss = test_step(next(test_iterator), during_training_metrics, 'test')
                 
                 t.set_postfix({'loss': test_loss.numpy()})
                 t.update(1)
@@ -254,14 +259,14 @@ def main(argv):
         svhn_ood_iterator = iter(datasets['svhn_ood_dataset'])
         with tqdm(total=steps_per_eval, desc='OOD Test (SVHN)') as t:
             for step in range(steps_per_eval):
-                _ = test_step(next(svhn_ood_iterator), epoch_var, after_training_metrics, 'ood_svhn')
+                _ = test_step(next(svhn_ood_iterator), after_training_metrics, 'ood_svhn')
 
                 t.update(1)
 
         cifar100_ood_iterator = iter(datasets['cifar100_ood_dataset'])
         with tqdm(total=steps_per_eval, desc='OOD Test (CIFAR100)') as t:
             for step in range(steps_per_eval):
-                _ = test_step(next(cifar100_ood_iterator), epoch_var, after_training_metrics, 'ood_cifar100')
+                _ = test_step(next(cifar100_ood_iterator), after_training_metrics, 'ood_cifar100')
 
                 t.update(1)
         
@@ -292,7 +297,7 @@ def main(argv):
                 noisy_test_iterator = iter(noisy_test_dataset)
                 with tqdm(total=steps_per_eval, desc='Noisy dataset testing (noise std: {:.4f})'.format(noise_std)) as t:
                     for step in range(steps_per_eval):
-                        _ = test_step(next(noisy_test_iterator), epoch_var, after_training_metrics, 'noisy_test')
+                        _ = test_step(next(noisy_test_iterator), after_training_metrics, 'noisy_test')
                         
                         t.update(1)
 

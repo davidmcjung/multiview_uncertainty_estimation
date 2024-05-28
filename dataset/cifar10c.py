@@ -38,12 +38,15 @@ def train_test_datasets(datadir, corruptions=['gaussian_noise', 'glass_blur', 's
     test_size = len(test_label)
 
     # Create datasets
+    lengthscales_init = []
+    for v_num in range(len(corruptions)):
+        lengthscales_init.append(np.std(train_dataset[v_num],axis=0)*np.sqrt(train_dataset[v_num].shape[1]))
     train_dataset.append(train_label)
     train_set = tf.data.Dataset.from_tensor_slices(tuple(train_dataset)).shuffle(train_size, seed=seed).repeat().batch(batch_size)
     test_dataset.append(test_label)
     test_set = tf.data.Dataset.from_tensor_slices(tuple(test_dataset)).batch(batch_size)
-
-    return train_set, test_set, train_size, test_size
+    
+    return train_set, test_set, train_size, test_size, lengthscales_init
 
 def svhn_ood_dataset(cifar10c_datadir, svhn_datadir, corruptions=['gaussian_noise', 'glass_blur', 'snow'], severities=[1,1,1], batch_size=256, seed=1):  
     # Load SVHN test dataset

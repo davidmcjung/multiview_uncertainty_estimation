@@ -13,6 +13,7 @@ def get_model(opts, datasets):
         model.initialize(
             X=next(iter(datasets['train_dataset'].unbatch().batch(2000).take(1)))[:len(datasets['feat_dims'])], 
             num_data=datasets['train_size'],
+            lengthscales_init=datasets['lengthscales_init'],
             init_lengthscale_data=opts.init_lengthscale_data)
     elif opts.model == 'MNP':
         model = MNP(

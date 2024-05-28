@@ -163,20 +163,25 @@ def elbo(X, Y, model, s2_tilde=None, beta=1.):
 
 def combine_dist(f_mean, f_var, weighting='uniform'):
     num_dists = len(f_mean)
-    if weighting == 'uniform':
-        weight_matrix = [1/num_dists for _ in range(num_dists)]
-    elif weighting == 'entropy':
+    if 'entropy' in weighting:
         weight_matrix = [-(0.5*tf.math.log(2*np.pi*f_var[i])+0.5) for i in range(num_dists)] 
-    elif weighting == 'poe':
+    elif 'poe' in weighting:
         weight_matrix = tf.ones(num_dists)
                 
     # Normalize weight matrix
     if weighting != 'poe':
-        sum_weight = weight_matrix[0]
-        for i in range(1, num_dists):
-            sum_weight += weight_matrix[i]
-        for i in range(num_dists):
-            weight_matrix[i] = weight_matrix[i]/sum_weight
+        if 'softmax' in weighting:
+            sum_weight = tf.math.exp(weight_matrix[0])
+            for i in range(1, num_dists):
+                sum_weight += tf.math.exp(weight_matrix[i])
+            for i in range(num_dists):
+                weight_matrix[i] = tf.math.exp(weight_matrix[i])/sum_weight
+        else:
+            sum_weight = weight_matrix[0]
+            for i in range(1, num_dists):
+                sum_weight += weight_matrix[i]
+            for i in range(num_dists):
+                weight_matrix[i] = weight_matrix[i]/sum_weight
     
     weight_matrix = tf.cast(weight_matrix, dtype=tf.float64)
 
@@ -211,9 +216,9 @@ class MGP(tf.keras.Model):
         self.a_eps = a_eps
         self.beta = beta
         
-    def initialize(self, X, num_data, init_lengthscale_data=False): 
+    def initialize(self, X, num_data, lengthscales_init=None, init_lengthscale_data=False): 
         if init_lengthscale_data:
-            lengthscales = [tf.cast(tf.math.reduce_std(x,axis=0)*np.sqrt(x.shape[1]), dtype=default_float()) for x in X]
+            lengthscales = [tf.cast(x, dtype=default_float()) for x in lengthscales_init]
         else:
             lengthscales = [tf.convert_to_tensor([1.0] * x.shape[1], dtype=default_float()) for x in X]
         self.kern = [gpflow.kernels.RBF(lengthscales=lengthscale) for lengthscale in lengthscales]
