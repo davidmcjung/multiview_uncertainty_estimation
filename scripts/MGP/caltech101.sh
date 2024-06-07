@@ -1,5 +1,5 @@
 DATASET='Caltech101'
-DATADIR='/home/david/Projects/MultimodalUE/data'
+DATADIR='/path/to/data'
 SEED=1
 
 python main.py \

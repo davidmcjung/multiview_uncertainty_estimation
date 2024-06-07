@@ -197,7 +197,7 @@ class DotAttender(BaseAttender):
         return logits
 
 class RBFAttender(BaseAttender):
-    def __init__(self, *args, is_weight=False, **kwargs):
+    def __init__(self, *args, is_weight=False, init_lengthscale=10, **kwargs):
         super().__init__(*args, **kwargs)
         self.is_weight = is_weight
         if self.is_weight:
@@ -206,7 +206,7 @@ class RBFAttender(BaseAttender):
                 activation=None,
                 input_shape=(self.kq_size,))
 
-        self.lengthscale = tf.Variable(tf.ones(self.kq_size, dtype=tf.float32)*10., trainable=True, name='rbf_lengthscale')
+        self.lengthscale = tf.Variable(tf.ones(self.kq_size, dtype=tf.float32)*init_lengthscale, trainable=True, name='rbf_lengthscale')
         self.variance = tf.Variable(1., trainable=True)
 
     def score(self, keys, queries, **kwargs):

@@ -27,6 +27,9 @@ flags.DEFINE_float('end_lr', 1e-4, 'Final learning rate.')
 flags.DEFINE_integer('seed', 1, 'Random seed.')
 flags.DEFINE_integer('n_thresh', 10000, 'Number of thresholds to test for AUROC.')
 flags.DEFINE_float('clipnorm', None, 'Clipnorm for optimizer.')
+flags.DEFINE_string('lr_scheduler', 'linear', '[linear,piecewise]')
+flags.DEFINE_list('lr_epochs', [10,20], 'Epochs to change learning rate for piecewise scheduler.')
+flags.DEFINE_list('lr_list', [1e-3,1e-4,1e-5], 'Learning rates for piecewise schduler.')
 
 # Params for models
 flags.DEFINE_string('model', 'MGP', '[MGP,MNP]')
@@ -42,7 +45,7 @@ flags.DEFINE_bool('init_lengthscale_data', True, 'Wheter to intialise kernel len
 # Params for MNP
 flags.DEFINE_integer('r_dim', 512, 'Latent space dimension.')
 flags.DEFINE_integer('n_context_points', 200, 'Total number of context points.')
-flags.DEFINE_float('l2_mlp', 3e-2, 'L2-regularization for MLP in MNP.')
+flags.DEFINE_float('l2_mlp', 1., 'L2-regularization for MLP in MNP.')
 flags.DEFINE_float('l2_lengthscale', 1., 'L2-regularization for lengthscale in RBF attention.')
 flags.DEFINE_string('mlp_norm_type', 'layer_norm', 'Normalization layer type for MLP in MNP [layer_norm, batch_norm]')
 flags.DEFINE_string('attention', 'adaptive_rbf', 'Attention type [adaptive_rbf,dot,scaledot]')
@@ -54,6 +57,8 @@ flags.DEFINE_integer('update_freq', 5, 'Update frequency for context memory.')
 flags.DEFINE_integer('warmup_epochs', 100, 'The number of warm-up epochs.')
 flags.DEFINE_float('warmup_lr', 1e-3, 'Initial learning rate for warm-up.')
 flags.DEFINE_string('update_loss', 'mse', 'Loss used for updating context memory [mse,ce].')
+flags.DEFINE_float('init_lengthscale', 10., 'Initial lengthscale.')
+flags.DEFINE_string('context_memory_init', 'data', 'Whether to initialise context memory from data.')
 
 FLAGS = flags.FLAGS
 
@@ -87,10 +92,10 @@ def main(argv):
     # Get model
     logging.info('Building model')
     model = get_model(opts=FLAGS, datasets=datasets)
-    scheduler = tf.keras.optimizers.schedules.PolynomialDecay(FLAGS.lr, FLAGS.epochs*steps_per_epoch, FLAGS.end_lr)
-    #epochs_to_reduce_lr = [80,120]
-    #lr_values = [FLAGS.lr*(0.2**i) for i in range(len(epochs_to_reduce_lr)+1)]
-    #scheduler = tf.keras.optimizers.schedules.PiecewiseConstantDecay(epochs_to_reduce_lr, lr_values)
+    if FLAGS.lr_scheduler == 'linear':
+        scheduler = tf.keras.optimizers.schedules.PolynomialDecay(FLAGS.lr, FLAGS.epochs*steps_per_epoch, FLAGS.end_lr)
+    elif FLAGS.lr_scheduler == 'piecewise':
+        scheduler = tf.keras.optimizers.schedules.PiecewiseConstantDecay([int(epoch)*steps_per_epoch for epoch in FLAGS.lr_epochs], [float(lr) for lr in FLAGS.lr_list])
     optimizer = tf.keras.optimizers.Adam(learning_rate=scheduler, clipnorm=FLAGS.clipnorm)
 
     warmup_scheduler = tf.keras.optimizers.schedules.PolynomialDecay(FLAGS.warmup_lr, FLAGS.warmup_epochs*steps_per_epoch, FLAGS.warmup_lr*1e-1)

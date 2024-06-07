@@ -19,7 +19,8 @@ class UnimodalModule(tf.keras.Model):
             attention="rbf",
             attention_kwargs={},
             temp=0.01,
-            l2_lengthscale=1.):
+            l2_lengthscale=1.,
+            init_lengthscale=10.):
         super().__init__()
         self.x_dim = x_dim
         self.y_dim = y_dim
@@ -40,8 +41,8 @@ class UnimodalModule(tf.keras.Model):
         self.s_encoder = base_encoder(self.r_dim, self.y_dim, self.r_dim, l2=l2, is_out_bn=True, norm_type=mlp_norm_type)
 
         self.scale_transformer=lambda x: 0.01 + 0.99 *  tf.math.softplus(x)
-        self.init_context_memory(context_memory_init)
-
+        self.init_context_memory(None)
+        attention_kwargs.update({'init_lengthscale': init_lengthscale})
         self.attender = get_attender(attention, self.r_dim, self.r_dim, self.r_dim, **attention_kwargs)
 
         self.temp = temp
@@ -133,7 +134,8 @@ class MNP(tf.keras.Model):
         scale_transformer=lambda y_scale: 0.01 + 0.99 *  tf.math.softplus(y_scale),
         n_z_samples=100,
         rand_mask=True,
-        temp=0.01):
+        temp=0.01,
+        init_lengthscale=10.):
         super().__init__()
 
         self.num_views = len(x_dim_list)
@@ -147,14 +149,15 @@ class MNP(tf.keras.Model):
                     x_dim=x_dim_list[view],
                     y_dim=y_dim,
                     r_dim=r_dim,
-                    context_memory_init=(context_memory_init_list[view],context_memory_init_list[-1]),
+                    context_memory_init=(context_memory_init_list[view],context_memory_init_list[-1]) if context_memory_init_list is not None else None,
                     n_context_points=n_context_points,
                     l2=l2_mlp,
                     mlp_norm_type=mlp_norm_type,
                     attention=attention,
                     attention_kwargs=attention_kwargs,
                     temp=temp,
-                    l2_lengthscale=l2_lengthscale
+                    l2_lengthscale=l2_lengthscale,
+                    init_lengthscale=init_lengthscale
                 )
             )
         
@@ -172,14 +175,13 @@ class MNP(tf.keras.Model):
         self.scale_transformer = scale_transformer
 
         self.rand_mask = rand_mask
-        if self.rand_mask:
-            # Create subset masking for all possible 
-            # combinations of choosing modalities.
-            # e.g., For two modalities,
-            #    [[1., 0.],
-            #    [0., 1.],
-            #    [1., 1.]]
-            self.subset_mask = tf.Variable(powerset(self.num_views), dtype=tf.float32, trainable=False)
+        # Create subset masking for all possible 
+        # combinations of choosing modalities.
+        # e.g., For two modalities,
+        #    [[1., 0.],
+        #    [0., 1.],
+        #    [1., 1.]]
+        self.subset_mask = tf.Variable(powerset(self.num_views), dtype=tf.float32, trainable=False)
 
     def call(self, X_trgt_list, Y_trgt, training=True):
         Y_trgt_OH = tf.one_hot(tf.cast(Y_trgt, dtype=tf.int32), self.y_dim)
